@@ -1,6 +1,7 @@
 import tkinter as tk
 import json
 from tkinter import ttk, messagebox, filedialog
+from PIL import ImageTk, Image
 
 players = ["Bapper", "Jordy", "Stevo", "Varel", "Mixo", "Hok"]
 maps = ["Vault", "Skyline", "Rewind", "Protocall", "Red Card"]
@@ -286,7 +287,7 @@ def create_search_tab(notebook):
                             match["Result"]
                         ))
                 for item in tree.get_children():
-                    result_value = tree.item(item)['values'][-1]  # Get the last column value (Result)
+                    result_value = tree.item(item)['values'][-1]
                 if result_value == 'Win':
                     tree.item(item, tags=('win',))
                 elif result_value == 'Loss':
@@ -348,11 +349,9 @@ def create_totals_tab(notebook):
     tree.configure(yscrollcommand=scrollbar.set)
 
     def update_totals():
-        # Clear existing entries
         for item in tree.get_children():
             tree.delete(item)
 
-        # Calculate totals
         player_totals = {}
         for series in match_data:
             for match in series["Matches"]:
@@ -370,7 +369,6 @@ def create_totals_tab(notebook):
                     player_totals[player]["kills"] += stat["Kills"]
                     player_totals[player]["deaths"] += stat["Deaths"]
                     
-                    # Handle objective based on game mode
                     if match["Game Mode"] == "Hardpoint":
                         if isinstance(stat["OBJ"], str):
                             player_totals[player]["time_on_hill"] += mmss_to_seconds(stat["OBJ"])
@@ -381,7 +379,6 @@ def create_totals_tab(notebook):
                     elif match["Game Mode"] == "Search and Destroy":
                         player_totals[player]["plants"] += int(stat["OBJ"])
 
-        # Insert data into tree
         for player, totals in player_totals.items():
             kd_ratio = totals["kills"] / totals["deaths"] if totals["deaths"] != 0 else totals["kills"]
             time_on_hill = seconds_to_mmss(totals["time_on_hill"])
@@ -425,13 +422,24 @@ def create_totals_tab(notebook):
             else:
                 tv.heading(header, text=header)
 
+def create_splash_background(root):
+    image_path = "Resources/stormlogo.png"
+    try:
+        image = Image.open(image_path)
+        photo = ImageTk.PhotoImage(image)
+
+        canvas = tk.Canvas(root, width=image.width, height=image.height)
+        canvas.pack(fill="both", expand=True)
+        canvas.create_image(0, 0, image=photo, anchor="nw")
+        canvas.image = photo
+    except Exception as e:
+        print(f"Error loading image: {e}")
+
 root = tk.Tk()
 root.title("Call of Duty Data Tracker")
-#icon = tk.PhotoImage(file=)
-#root.iconphoto(False, icon)
 root.geometry("800x700")
 window_width = 800
-window_height = 700
+window_height = 800
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
 position_top = int(screen_height / 2 - window_height / 2)
@@ -440,6 +448,8 @@ root.geometry(f'{window_width}x{window_height}+{position_right}+{position_top}')
 root.resizable(True, True)
 win_var = tk.BooleanVar()
 lose_var = tk.BooleanVar()
+
+create_splash_background(root)
 
 root.grid_rowconfigure(0, weight=1)
 root.grid_columnconfigure(0, weight=1)
@@ -554,4 +564,14 @@ export_button.config(cursor="hand2")
 disclaimer_label = ttk.Label(frame, text="* File must be saved as a .json to do searches.", foreground="red")
 disclaimer_label.grid(row=15, column=0, columnspan=4, padx=5, pady=5, sticky=tk.W)
 
-root.mainloop()
+def main():
+    root.title("CoD Stats Tracker")
+    create_splash_background(root)
+    
+    close_button = ttk.Button(root, text="Close", command=root.destroy)
+    close_button.pack(pady=20)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
