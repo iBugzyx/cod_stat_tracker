@@ -1,7 +1,49 @@
-import tkinter as tk
+import os 
 import json
-from tkinter import ttk, messagebox, filedialog
+import tkinter as tk
 from PIL import ImageTk, Image
+from tkinter import ttk, messagebox, filedialog
+
+"""
+better ui
+dark mode
+make look like the scoreboard in cod
+MVP possibly
+maybe awards for objectives
+exapmple mvp score system below
+"""
+
+json_file_path = "cod_ireland_stats.json"
+
+def init_data_file():
+    if not os.path.exists(json_file_path):
+        with open(json_file_path, "w") as file:
+            json.dump([], file)
+
+def load_init_data():
+    global match_data, current_series
+    if os.path.exists(json_file_path):
+        try:
+            with open(json_file_path, "r") as file:
+                match_data = json.load(file)
+                if match_data:
+                    current_series = match_data[-1].copy()
+                else:
+                    current_series = {"Series Number": 1, "Matches": []}
+        except json.JSONDecodeError:
+            messagebox.showerror("Error", "Failed to load initial data.")
+            match_data = []
+            current_series = {"Series Number": 1, "Matches": []}
+        except Exception as e:
+            messagebox.showerror("Error", f"An unexpected error occurred: {e}")
+            match_data = []
+            current_series = {"Series Number": 1, "Matches": []}
+    else:
+        match_data = []
+        current_series = {"Series Number": 1, "Matches": []}
+
+init_data_file()
+load_init_data()
 
 players = ["Bapper", "Jordy", "Stevo", "Varel", "Mixo", "Hok"]
 maps = ["Vault", "Skyline", "Rewind", "Protocall", "Red Card"]
@@ -112,12 +154,10 @@ def export_data():
         messagebox.showerror("Error", "No match details to export.")
         return
 
-    file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json")])
+    file_path = json_file_path
 
     if not file_path:
         return
-    
-    export_lines = []
 
     try:
         with open(file_path, "w") as file:
@@ -129,7 +169,7 @@ def export_data():
 def import_data():
     global match_data, current_series
 
-    file_path = filedialog.askopenfilename(filetypes=[("JSON Files", "*.json")])
+    file_path = json_file_path
 
     if not file_path:
         messagebox.showinfo("Info", "No file selected.")
@@ -171,6 +211,7 @@ def import_data():
         messagebox.showerror("Error", f"Data validation failed: {ve}")
     except Exception as e:
         messagebox.showerror("Error", f"An unexpected error occurred: {e}")
+
 
 def create_search_tab(notebook):
     search_tab = ttk.Frame(notebook)
@@ -428,7 +469,7 @@ def create_splash_background(root):
         image = Image.open(image_path)
         photo = ImageTk.PhotoImage(image)
 
-        canvas = tk.Canvas(root, width=image.width, height=image.height)
+        canvas = tk.Canvas(root, width=image.width, height=image.height, bg="black")
         canvas.pack(fill="both", expand=True)
         canvas.create_image(0, 0, image=photo, anchor="nw")
         canvas.image = photo
@@ -566,10 +607,9 @@ disclaimer_label.grid(row=15, column=0, columnspan=4, padx=5, pady=5, sticky=tk.
 
 def main():
     root.title("CoD Stats Tracker")
-    create_splash_background(root)
     
-    close_button = ttk.Button(root, text="Close", command=root.destroy)
-    close_button.pack(pady=20)
+    create_splash_background(root)
+    import_data()
 
     root.mainloop()
 
