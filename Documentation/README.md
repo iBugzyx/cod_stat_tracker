@@ -1,3 +1,6 @@
+# cod_stat_tracker
+tracks stats for cod ireland
+
 Welcome to the CoD Ireland League Stat Tracker for the Belfast Storm
 
 ----------------------------------------------------------------
@@ -14,5 +17,3 @@ Welcome to the CoD Ireland League Stat Tracker for the Belfast Storm
 10. !!!!ONLY FOR USE BY BELFAST STORM!!!! unless permitted by the creator of the application
 
 ----------------------------------------------------------------
-
-                                          ENJOY THE APPLICATION

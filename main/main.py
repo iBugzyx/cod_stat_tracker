@@ -3,6 +3,8 @@ import json
 import tkinter as tk
 from PIL import ImageTk, Image
 from tkinter import ttk, messagebox, filedialog
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 """
 better ui
@@ -216,24 +218,6 @@ def import_data():
 def create_search_tab(notebook):
     search_tab = ttk.Frame(notebook)
     notebook.add(search_tab, text="Search Stats")
-    disclaimer_label = ttk.Label(
-        search_tab,
-        text="* Import the file from first tab in order to search through them.",
-        foreground="red",
-        padding=10
-    )
-    disclaimer_label.pack(fill="x", padx=10, pady=5)
-
-    def import_stats():
-        import_data()
-        if match_data:
-            disclaimer_label.config(
-                text="File loaded successfully. Ready to search!", 
-                foreground="green"
-            )
-
-    import_button = ttk.Button(search_tab, text="Import Stats", command=import_stats)
-    import_button.pack(padx=10, pady=5)
 
     search_frame = ttk.LabelFrame(search_tab, text="Search Filters", padding=10)
     search_frame.pack(fill="x", padx=10, pady=5)
@@ -275,11 +259,10 @@ def create_search_tab(notebook):
     tree_frame = ttk.Frame(search_tab)
     tree_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-    tree = ttk.Treeview(tree_frame, columns=("K/D","Series", "Match", "Player", "Kills", "Deaths", "OBJ", "Map", "Mode", "Result"), show="headings")
+    tree = ttk.Treeview(tree_frame, columns=("K/D", "Match", "Player", "Kills", "Deaths", "OBJ", "Map", "Mode", "Result"), show="headings")
 
-    for col in ("K/D","Series", "Match", "Player", "Kills", "Deaths", "OBJ", "Map", "Mode", "Result"):
+    for col in ("K/D", "Match", "Player", "Kills", "Deaths", "OBJ", "Map", "Mode", "Result"):
         tree.heading(col, text=col, command=lambda _col=col: treeview_sort_column(tree, _col, False))
-
 
     for col in tree["columns"]:
         tree.column(col, width=70)
@@ -308,7 +291,7 @@ def create_search_tab(notebook):
                 (map_filter and match["Map"] != map_filter) or \
                 (mode_filter and match["Game Mode"] != mode_filter) or \
                 (result_filter and match["Result"] != result_filter) or \
-                (objective_filter and "OBJ" in match and not any(stat["OBJ"] == objective_filter or (match["Game Mode"] == "Hardpoint" and str(mmss_to_seconds(stat["OBJ"])) == objective_filter) for stat in match["Player Stats"])):
+                (objective_filter and "OBJ" in match and not any(stat["OBJ"] == objective_filter or (match["Game Mode"] == "Hardpoint" and str(mmss_to_seconds(stat["OBJ"])) == objective_filter) for stat in match["Player Stats"])): 
                     continue
 
                 for stat in match["Player Stats"]:
@@ -317,7 +300,6 @@ def create_search_tab(notebook):
                         kd_indicator = '+' if stat["Kills"] > stat["Deaths"] else '-' if stat["Kills"] < stat["Deaths"] else '='
                         tree.insert("", "end", values=(
                             kd_indicator,
-                            series["Series Number"],
                             match["Match Number"],
                             stat["Player"],
                             stat["Kills"],
@@ -337,18 +319,18 @@ def create_search_tab(notebook):
                 tree.tag_configure("win", background="#00FF00")
                 tree.tag_configure("loss", background="#FF0000")
 
-
     ttk.Button(search_frame, text="Search", command=search_stats).grid(row=3, column=3, columnspan=2, pady=5)
 
     def clear_filters():
         player_var.set("")
         map_var.set("")
-        mode_var.set("")
-        objective_var.set("")
-        result_var.set("")
         search_mode_var.set("")
         search_objective_var.set("")
-        search_stats()
+        result_var.set("")
+        
+        # Clear the tree view
+        for item in tree.get_children():
+            tree.delete(item)
 
     ttk.Button(search_frame, text="Clear Filters", command=clear_filters).grid(row=3, column=0, columnspan=4, pady=5)
 
@@ -437,9 +419,6 @@ def create_totals_tab(notebook):
     update_button = ttk.Button(totals_tab, text="Update Totals", command=update_totals)
     update_button.pack(pady=10)
 
-    import_button = ttk.Button(totals_tab, text="Import Data", command=import_data)
-    import_button.pack(pady=10)
-
     def treeview_sort_column(tv, col, reverse):
         l = [(tv.set(k, col), k) for k in tv.get_children('')]
         try:
@@ -463,6 +442,75 @@ def create_totals_tab(notebook):
             else:
                 tv.heading(header, text=header)
 
+def create_charts_tab(notebook):
+    charts_tab = ttk.Frame(notebook)
+    notebook.add(charts_tab, text="Charts")
+
+    ttk.Label(charts_tab, text="Select Chart Type:").pack(pady=10)
+    
+    chart_type_var = tk.StringVar()
+    chart_type_menu = ttk.Combobox(charts_tab, textvariable=chart_type_var, values=["Kills vs Deaths", "Objectives"], state="readonly")
+    chart_type_menu.pack(pady=10)
+    
+    chart_frame = ttk.Frame(charts_tab)
+    chart_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def plot_chart():
+        for widget in chart_frame.winfo_children():
+            widget.destroy()
+
+        chart_type = chart_type_var.get()
+        if chart_type == "Kills vs Deaths":
+            plot_kills_vs_deaths(chart_frame)
+        elif chart_type == "Objectives":
+            plot_objectives(chart_frame)
+
+    ttk.Button(charts_tab, text="Plot Chart", command=plot_chart).pack(pady=10)
+
+def plot_kills_vs_deaths(frame):
+    players = []
+    kills = []
+    deaths = []
+
+    for series in match_data:
+        for match in series["Matches"]:
+            for stat in match["Player Stats"]:
+                players.append(stat["Player"])
+                kills.append(stat["Kills"])
+                deaths.append(stat["Deaths"])
+
+    fig, ax = plt.subplots()
+    ax.bar(players, kills, label='Kills')
+    ax.bar(players, deaths, label='Deaths', bottom=kills)
+    ax.set_xlabel('Players')
+    ax.set_ylabel('Count')
+    ax.set_title('Kills vs Deaths')
+    ax.legend()
+
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill="both", expand=True)
+
+def plot_objectives(frame):
+    players = []
+    objectives = []
+
+    for series in match_data:
+        for match in series["Matches"]:
+            for stat in match["Player Stats"]:
+                players.append(stat["Player"])
+                objectives.append(stat["OBJ"])
+
+    fig, ax = plt.subplots()
+    ax.bar(players, objectives)
+    ax.set_xlabel('Players')
+    ax.set_ylabel('Objectives')
+    ax.set_title('Objectives by Player')
+
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill="both", expand=True)
+
 def create_splash_background(root):
     image_path = "Resources/stormlogo.png"
     try:
@@ -480,7 +528,7 @@ root = tk.Tk()
 root.title("Call of Duty Data Tracker")
 root.geometry("800x700")
 window_width = 800
-window_height = 800
+window_height = 700
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
 position_top = int(screen_height / 2 - window_height / 2)
@@ -512,8 +560,8 @@ for i in range(16):
     frame.grid_columnconfigure(i, weight=1)
 
 create_search_tab(notebook)
-
 create_totals_tab(notebook)
+create_charts_tab(notebook)
 
 
 mode_var = tk.StringVar()
@@ -601,9 +649,6 @@ export_hint.grid(row=14, column=0, columnspan=2, padx=5, pady=5, sticky=tk.E)
 export_button = ttk.Button(frame, text="Export Data", command=export_data)
 export_button.grid(row=14, column=2, columnspan=2, padx=5, pady=5)
 export_button.config(cursor="hand2")
-
-disclaimer_label = ttk.Label(frame, text="* File must be saved as a .json to do searches.", foreground="red")
-disclaimer_label.grid(row=15, column=0, columnspan=4, padx=5, pady=5, sticky=tk.W)
 
 def main():
     root.title("CoD Stats Tracker")
