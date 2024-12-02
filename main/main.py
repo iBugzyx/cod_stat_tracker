@@ -1,3 +1,4 @@
+import sys
 import os 
 import json
 import tkinter as tk
@@ -5,25 +6,97 @@ from PIL import ImageTk, Image
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
 
 """
-better ui
+try and build and dl exe to google drive for use by others. or git hub it
 dark mode
-make look like the scoreboard in cod
-MVP possibly
-maybe awards for objectives
-exapmple mvp score system below
+work on ui
+better user experience
+
 """
+# Google Drive Authentication
+
+gauth = GoogleAuth()
+client_secrets_file = os.path.abspath("main/client_secrets.json")
+credentials_file = os.path.abspath("main/credentials.json")
+
+print(f"Client secrets file path: {client_secrets_file}")
+print(f"Credentials file path: {credentials_file}")
+
+if not os.path.exists(client_secrets_file):
+    print(f"Client secrets file does not exist at path: {client_secrets_file}")
+else:
+    print(f"Client secrets file found at path: {client_secrets_file}")
+
+gauth.settings["client_config_file"] = client_secrets_file
+
+gauth.LoadCredentialsFile(credentials_file)
+
+try:
+    if gauth.credentials is None:
+        gauth.LocalWebserverAuth()
+    elif gauth.access_token_expired:
+        gauth.Refresh()
+    else:
+        gauth.Authorize()
+except Exception as e:
+    print(f"Failed to authenticate: {e}")
+    gauth.LocalWebserverAuth()
+
+gauth.SaveCredentialsFile(credentials_file)
+
+drive = GoogleDrive(gauth)
 
 json_file_path = "cod_ireland_stats.json"
 
+players = ["Bapper", "Jordy", "Stevo", "Varel", "Mixo", "Hok-Tuah"]
+maps = ["Vault", "Skyline", "Rewind", "Protocall", "Red Card"]
+game_modes = ["Hardpoint", "Control", "Search and Destroy"]
+objectives = ["Time on Hill", "Plants", "Captures"]
+match_data = []
+current_series = {"Series Number": 1, "Matches": []}
+
+# File Related Functions
+
+def download_from_google_drive(file_name, local_path):
+    try:
+        file_list = drive.ListFile({'q': f"title='{file_name}'"}).GetList()
+        print(f"File list: {file_list}")
+        if file_list:
+            file_drive = file_list[0]
+            file_drive.GetContentFile(local_path)
+            return True
+        else:
+            print(f"File {file_name} not found on Google Drive.")
+            return False
+    except Exception as e:
+        print(f"Failed to download file from Google Drive: {e}")
+        return False
+
+def upload_to_google_drive(file_path):
+    try:
+        file = drive.CreateFile({'title': os.path.basename(file_path)})
+        file.SetContentFile(file_path)
+        file.Upload()
+        return True
+    except Exception as e:
+        print(f"Failed to upload file to Google Drive: {e}")
+        return False
+    
 def init_data_file():
     if not os.path.exists(json_file_path):
-        with open(json_file_path, "w") as file:
-            json.dump([], file)
+        try:
+            with open(json_file_path, "w") as file:
+                json.dump([], file)
+        except Exception as e:
+            print(f"Failed to initialize data file: {e}")
 
 def load_init_data():
     global match_data, current_series
+    if not os.path.exists(json_file_path):
+        download_from_google_drive("cod_ireland_stats.json", json_file_path)
     if os.path.exists(json_file_path):
         try:
             with open(json_file_path, "r") as file:
@@ -44,40 +117,59 @@ def load_init_data():
         match_data = []
         current_series = {"Series Number": 1, "Matches": []}
 
-init_data_file()
-load_init_data()
+def import_data():
+    global match_data, current_series
 
-players = ["Bapper", "Jordy", "Stevo", "Varel", "Mixo", "Hok"]
-maps = ["Vault", "Skyline", "Rewind", "Protocall", "Red Card"]
-game_modes = ["Hardpoint", "Control", "Search and Destroy"]
-objectives = ["Time on Hill", "Plants", "Captures"]
+    file_path = json_file_path
 
-match_data = []
-current_series = {"Series Number": 1, "Matches": []}
+    if not file_path:
+        messagebox.showinfo("Info", "No file selected.")
+        return
 
-def update_checkbox_color():
-    win_checkbox.config(background="green" if win_var.get() else "SystemButtonFace")
-    lose_checkbox.config(background="red" if lose_var.get() else "SystemButtonFace")
+    try:
+        with open(file_path, "r") as file:
+            imported_data = json.load(file)
 
-def update_objective_options(event):
-    game_mode = mode_var.get()
-    objective = {
-        "Hardpoint": "Time on Hill",
-        "Control": "Captures",
-        "Search and Destroy": "Plants"
-    }.get(game_mode, "N/A")
-    objective_label.config(text=objective)
+        if not isinstance(imported_data, list):
+            raise ValueError("Invalid data format: Expected a list of series data.")
 
-def seconds_to_mmss(seconds):
-    minutes, seconds = divmod(int(seconds), 60)
-    return f"{minutes:02d}:{seconds:02d}"
+        for series in imported_data:
+            if not isinstance(series, dict):
+                raise ValueError(f"Invalid series structure in JSON data: {series}")
+            if "Series Number" not in series or "Matches" not in series:
+                raise ValueError(f"Missing keys in series: {series}")
 
-def mmss_to_seconds(mmss):
-    if ':' in mmss:
-        minutes, seconds = map(int, mmss.split(':'))
-        return minutes * 60 + seconds
-    else:
-        return int(mmss)
+            for match in series["Matches"]:
+                if not isinstance(match, dict):
+                    raise ValueError(f"Invalid match structure in JSON data: {match}")
+                if "Game Mode" not in match or "Map" not in match or "Player Stats" not in match:
+                    raise ValueError(f"Missing keys in match: {match}")
+
+                for player_stats in match["Player Stats"]:
+                    if not isinstance(player_stats, dict):
+                        raise ValueError(f"Invalid player stats structure in JSON data: {player_stats}")
+                    if "Player" not in player_stats or "Kills" not in player_stats or "Deaths" not in player_stats or "OBJ" not in player_stats:
+                        raise ValueError(f"Missing keys in player stats: {player_stats}")
+                    
+                    if match["Game Mode"] == "Hardpoint":
+                        if isinstance(player_stats["OBJ"], str):
+                            player_stats["OBJ"] = mmss_to_seconds(player_stats["OBJ"])
+                        else:
+                            raise ValueError(f"Invalid OBJ format for Hardpoint: {player_stats['OBJ']}")
+
+        match_data = imported_data
+        if match_data:
+            current_series = match_data[-1].copy()
+        else:
+            current_series = {"Series Number": 1, "Matches": []}
+        messagebox.showinfo("Success", f"Data imported successfully from {file_path}.")
+
+    except json.JSONDecodeError:
+        messagebox.showerror("Error", "The selected file is not a valid JSON file.")
+    except ValueError as ve:
+        messagebox.showerror("Error", f"Data validation failed: {ve}")
+    except Exception as e:
+        messagebox.showerror("Error", f"An unexpected error occurred: {e}")
 
 def save_round():
     player_stats = []
@@ -127,13 +219,64 @@ def save_round():
         "Match Number": len(current_series["Matches"]) + 1,
         "Result": "Win" if win_var.get() else "Loss"
         }
-
     current_series["Matches"].append(current_match_data)
 
     messagebox.showinfo("Success", f"Match {current_match_data['Match Number']} for Series {current_series['Series Number']} has been saved.")
     clear_all_inputs()
     match_data.append(current_series.copy())
     clear_all_series_data()
+
+def export_data():
+    if not match_data:
+        messagebox.showerror("Error", "No match details to export.")
+        return
+
+    file_path = json_file_path
+
+    if not file_path:
+        return
+
+    try:
+        with open(file_path, "w") as file:
+            json.dump(match_data, file, indent=4)
+        if not upload_to_google_drive(file_path):
+            with open("backup_cod_ireland_stats.json", "w") as backup_file:
+                json.dump(match_data, backup_file, indent=4)
+            messagebox.showinfo("Success", f"Exported successfully to backup_cod_ireland_stats.json as a backup.")
+        else:
+            messagebox.showinfo("Success", f"Exported successfully to Google Drive.")
+    except Exception as e:
+        print(f"Error in export_data: {e}")
+        messagebox.showerror("Error", f"Failed to save file: {e}")
+
+init_data_file()
+load_init_data()
+
+# Utility Functions
+
+def update_checkbox_color():
+    win_checkbox.config(background="green" if win_var.get() else "SystemButtonFace")
+    lose_checkbox.config(background="red" if lose_var.get() else "SystemButtonFace")
+
+def update_objective_options(event):
+    game_mode = mode_var.get()
+    objective = {
+        "Hardpoint": "Time on Hill",
+        "Control": "Captures",
+        "Search and Destroy": "Plants"
+    }.get(game_mode, "N/A")
+    objective_label.config(text=objective)
+
+def seconds_to_mmss(seconds):
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes:02d}:{seconds:02d}"
+
+def mmss_to_seconds(mmss):
+    if ':' in mmss:
+        minutes, seconds = map(int, mmss.split(':'))
+        return minutes * 60 + seconds
+    else:
+        return int(mmss)
 
 def clear_player_inputs():
     for _, player_var, kills_entry, deaths_entry, obj_entry in player_widgets:
@@ -151,69 +294,7 @@ def clear_all_series_data():
     global current_series
     current_series = {"Series Number": current_series["Series Number"] + 1, "Matches": []}
 
-def export_data():
-    if not match_data:
-        messagebox.showerror("Error", "No match details to export.")
-        return
-
-    file_path = json_file_path
-
-    if not file_path:
-        return
-
-    try:
-        with open(file_path, "w") as file:
-            json.dump(match_data, file, indent=4)
-        messagebox.showinfo("Success", f"Exported successfully to {file_path}.")
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to save file: {e}")
-
-def import_data():
-    global match_data, current_series
-
-    file_path = json_file_path
-
-    if not file_path:
-        messagebox.showinfo("Info", "No file selected.")
-        return
-
-    try:
-        with open(file_path, "r") as file:
-            imported_data = json.load(file)
-
-        if not isinstance(imported_data, list):
-            raise ValueError("Invalid data format: Expected a list of series data.")
-
-        for series in imported_data:
-            if not isinstance(series, dict) or "Series Number" not in series or "Matches" not in series:
-                raise ValueError("Invalid series structure in JSON data.")
-
-            for match in series["Matches"]:
-                if not isinstance(match, dict) or "Game Mode" not in match or "Map" not in match or "Player Stats" not in match:
-                    raise ValueError("Invalid match structure in JSON data.")
-
-                for player_stats in match["Player Stats"]:
-                    if not isinstance(player_stats, dict) or \
-                       "Player" not in player_stats or \
-                       "Kills" not in player_stats or \
-                       "Deaths" not in player_stats or \
-                       "OBJ" not in player_stats:
-                        raise ValueError("Invalid player stats structure in JSON data.")
-                    
-                    if match["Game Mode"] == "Hardpoint":
-                        player_stats["OBJ"] = mmss_to_seconds(player_stats["OBJ"])
-
-        match_data = imported_data
-        current_series = match_data[-1].copy()
-        messagebox.showinfo("Success", f"Data imported successfully from {file_path}.")
-
-    except json.JSONDecodeError:
-        messagebox.showerror("Error", "The selected file is not a valid JSON file.")
-    except ValueError as ve:
-        messagebox.showerror("Error", f"Data validation failed: {ve}")
-    except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occurred: {e}")
-
+# GUI Functions
 
 def create_search_tab(notebook):
     search_tab = ttk.Frame(notebook)
@@ -328,7 +409,6 @@ def create_search_tab(notebook):
         search_objective_var.set("")
         result_var.set("")
         
-        # Clear the tree view
         for item in tree.get_children():
             tree.delete(item)
 
@@ -486,7 +566,6 @@ def plot_kills_vs_deaths(frame):
     ax.set_ylabel('Count')
     ax.set_title('Kills vs Deaths')
     ax.legend()
-
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
     canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -516,7 +595,6 @@ def create_splash_background(root):
     try:
         image = Image.open(image_path)
         photo = ImageTk.PhotoImage(image)
-
         canvas = tk.Canvas(root, width=image.width, height=image.height, bg="black")
         canvas.pack(fill="both", expand=True)
         canvas.create_image(0, 0, image=photo, anchor="nw")
@@ -643,12 +721,14 @@ save_round_button = ttk.Button(frame, text="Save Stats", command=save_round)
 save_round_button.grid(row=13, column=2, columnspan=2, padx=5, pady=5)
 save_round_button.config(cursor="hand2")
 
-export_hint = ttk.Label(frame, text="Export all the stats to the file for searching .")
+export_hint = ttk.Label(frame, text="Export the series data to add to the file.")
 export_hint.grid(row=14, column=0, columnspan=2, padx=5, pady=5, sticky=tk.E)
 
 export_button = ttk.Button(frame, text="Export Data", command=export_data)
 export_button.grid(row=14, column=2, columnspan=2, padx=5, pady=5)
 export_button.config(cursor="hand2")
+
+# Main Function
 
 def main():
     root.title("CoD Stats Tracker")
